@@ -32,8 +32,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Button btnStartStop;
     private CountDownTimer workoutTimer, intervalTimer;
     private SensorManager sensorManager;
-    private Sensor stepCounterSensor;
-    private int initialStepCount = -1, currentStepCount = 0;
+    private Sensor stepDetectorSensor; // Değiştirildi: STEP_COUNTER -> STEP_DETECTOR
+    private int sessionStepCount = 0; // Değiştirildi: Her seansın adım sayacını tutar
     private boolean isWorkoutRunning = false, isHighIntensity = false;
     private int cycleCount = 0;
     private TextToSpeech textToSpeech;
@@ -53,7 +53,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         });
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        // Değiştirildi: Daha hassas olan STEP_DETECTOR sensörünü kullanıyoruz
+        stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
         updateUIToInitialState();
     }
 
@@ -96,8 +97,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         isWorkoutRunning = true;
         isHighIntensity = false;
         cycleCount = 0;
-        initialStepCount = -1;
-        currentStepCount = 0;
+        sessionStepCount = 0; // Değiştirildi: Antrenman başında seans sayacını sıfırla
 
         btnStartStop.setText(R.string.button_stop_workout);
         btnStartStop.setBackgroundColor(0xFFD32F2F); // Koyu Kırmızı
@@ -180,29 +180,38 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (isTtsInitialized) textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
     }
 
+    // YENİDEN DÜZENLENMİŞ METOT
     @SuppressLint("SetTextI18n")
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER && isWorkoutRunning) {
-            if (initialStepCount == -1) initialStepCount = (int) event.values[0];
-            currentStepCount = (int) event.values[0] - initialStepCount;
-            tvStepCount.setText(String.valueOf(currentStepCount));
+        // Sensör tipini STEP_DETECTOR olarak kontrol ediyoruz
+        if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR && isWorkoutRunning) {
+            // Her adım algılandığında bu blok çalışır. Sayacı bir artırmamız yeterlidir.
+            sessionStepCount++;
+            tvStepCount.setText(String.valueOf(sessionStepCount));
         }
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) { }
 
+    // YENİDEN DÜZENLENMİŞ METOT
     @Override
     protected void onResume() {
         super.onResume();
-        if (stepCounterSensor != null) sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_UI);
+        if (stepDetectorSensor != null) {
+            // Sensör verilerini mümkün olan en hızlı şekilde almak için SENSOR_DELAY_FASTEST kullanıyoruz
+            sensorManager.registerListener(this, stepDetectorSensor, SensorManager.SENSOR_DELAY_FASTEST);
+        }
     }
 
+    // YENİDEN DÜZENLENMİŞ METOT
     @Override
     protected void onPause() {
         super.onPause();
-        if (stepCounterSensor != null) sensorManager.unregisterListener(this);
+        if (stepDetectorSensor != null) {
+            sensorManager.unregisterListener(this);
+        }
     }
 
     @Override

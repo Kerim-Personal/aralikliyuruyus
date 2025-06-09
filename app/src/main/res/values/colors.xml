@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-</resources>
+    <color name="primary">#008770</color>
+    <color name="onPrimary">#FFFFFF</color>
+    <color name="primaryContainer">#7BF8E5</color>
+    <color name="onPrimaryContainer">#00201A</color>
+    <color name="secondary">#4A635D</color>
+    <color name="onSecondary">#FFFFFF</color>
+    <color name="secondaryContainer">#CDE9E0</color>
+    <color name="onSecondaryContainer">#05201B</color>
+    <color name="tertiary">#436278</color>
+    <color name="onTertiary">#FFFFFF</color>
+    <color name="tertiaryContainer">#C8E6FF</color>
+    <color name="onTertiaryContainer">#001E30</color>
+    <color name="error">#BA1A1A</color>
+    <color name="onError">#FFFFFF</color>
+    <color name="background">#FBFDFA</color>
+    <color name="onBackground">#191C1B</color>
+    <color name="surface">#FBFDFA</color>
+    <color name="onSurface">#191C1B</color>
+    <color name="surfaceVariant">#DBE5E1</color>
+    <color name="onSurfaceVariant">#3F4946</color>
+    <color name="outline">#6F7976</color>
+
+    <color name="stop_button_color">#B71C1C</color> </resources>

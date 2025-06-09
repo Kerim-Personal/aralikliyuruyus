@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="24dp"
-    android:background="#F0F4F8"
+    android:background="?attr/colorSurface"
     tools:context=".MainActivity">
 
     <TextView
@@ -14,7 +14,7 @@
         android:layout_centerHorizontal="true"
         android:layout_marginTop="40dp"
         android:text="@string/instruction_ready"
-        android:textColor="#333333"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="28sp"
         android:textStyle="bold"
         android:textAlignment="center"/>
@@ -27,7 +27,7 @@
         android:layout_centerHorizontal="true"
         android:layout_marginTop="32dp"
         android:text="@string/initial_total_timer"
-        android:textColor="#007BFF"
+        android:textColor="?attr/colorPrimary"
         android:textSize="80sp"
         android:textStyle="bold"/>
 
@@ -38,7 +38,7 @@
         android:layout_below="@id/tvTimer"
         android:layout_centerHorizontal="true"
         android:text="@string/initial_interval_timer"
-        android:textColor="#5A5A5A"
+        android:textColor="?attr/colorSecondary"
         android:textSize="32sp" />
 
     <LinearLayout
@@ -55,14 +55,14 @@
             android:layout_height="wrap_content"
             android:text="@string/workout_steps_label"
             android:textSize="18sp"
-            android:textColor="#333333"/>
+            android:textColor="?attr/colorOnSurfaceVariant"/>
 
         <TextView
             android:id="@+id/tvStepCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/initial_step_count"
-            android:textColor="#007BFF"
+            android:textColor="?attr/colorPrimary"
             android:textSize="54sp"
             android:textStyle="bold"/>
     </LinearLayout>
@@ -78,7 +78,7 @@
         android:paddingEnd="40dp"
         android:text="@string/button_start_workout"
         android:textSize="20sp"
-        android:backgroundTint="#388E3C"
-        android:textColor="@android:color/white"/>
+        android:backgroundTint="?attr/colorPrimary"
+        android:textColor="?attr/colorOnPrimary"/>
 
 </RelativeLayout>
