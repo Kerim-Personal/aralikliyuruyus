@@ -1,0 +1,25 @@
+<resources>
+
+    <string name="app_name">AralikliYuruyus</string>
+
+    <string name="workout_steps_label">Antrenman Adımları</string>
+    <string name="initial_step_count">0</string>
+    <string name="initial_total_timer">30:00</string>
+    <string name="initial_interval_timer">03:00</string>
+
+    <string name="instruction_ready">Başlamak için Hazır</string>
+    <string name="instruction_go_fast">Şimdi HIZLAN!</string>
+    <string name="instruction_go_slow">Şimdi YAVAŞ YÜRÜ</string>
+    <string name="instruction_workout_finished">Harika İş! Antrenman Tamamlandı</string>
+
+    <string name="button_start_workout">Antrenmanı Başlat</string>
+    <string name="button_stop_workout">Antrenmanı Durdur</string>
+
+    <string name="tts_workout_stopped">Antrenman durduruldu.</string>
+    <string name="tts_workout_complete">Tebrikler. Antrenman tamamlandı.</string>
+
+    <string name="permission_denied_toast">Adım sayar izni olmadan bu özellik çalışamaz.</string>
+    <string name="tts_not_supported_toast">Türkçe dil paketi desteklenmiyor.</string>
+    <string name="tts_init_failed_toast">Ses motoru başlatılamadı.</string>
+
+</resources>
