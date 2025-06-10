@@ -11,15 +11,24 @@
     <string name="instruction_go_fast">Şimdi HIZLAN!</string>
     <string name="instruction_go_slow">Şimdi YAVAŞ YÜRÜ</string>
     <string name="instruction_workout_finished">Harika İş! Antrenman Tamamlandı</string>
+    <string name="instruction_workout_paused">Antrenman Duraklatıldı</string>
+
 
     <string name="button_start_workout">Antrenmanı Başlat</string>
     <string name="button_stop_workout">Antrenmanı Durdur</string>
+    <string name="button_resume_workout">Devam Et</string>
+    <string name="button_reset_workout">Sıfırla</string>
+
 
     <string name="tts_workout_stopped">Antrenman durduruldu.</string>
+    <string name="tts_workout_paused">Antrenman duraklatıldı.</string>
     <string name="tts_workout_complete">Tebrikler. Antrenman tamamlandı.</string>
 
     <string name="permission_denied_toast">Adım sayar izni olmadan bu özellik çalışamaz.</string>
     <string name="tts_not_supported_toast">Türkçe dil paketi desteklenmiyor.</string>
     <string name="tts_init_failed_toast">Ses motoru başlatılamadı.</string>
+
+    <string name="title_activity_history">Antrenman Geçmişi</string>
+    <string name="button_history">Geçmiş</string>
 
 </resources>
