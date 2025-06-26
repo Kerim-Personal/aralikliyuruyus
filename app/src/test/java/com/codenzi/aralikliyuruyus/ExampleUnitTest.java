@@ -1,4 +1,4 @@
-package com.example.aralikliyuruyus;
+package com.codenzi.aralikliyuruyus;
 
 import org.junit.Test;
 

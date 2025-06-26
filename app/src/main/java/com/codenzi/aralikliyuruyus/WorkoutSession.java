@@ -1,4 +1,4 @@
-package com.example.aralikliyuruyus;
+package com.codenzi.aralikliyuruyus;
 
 import androidx.annotation.NonNull;
 import androidx.room.ColumnInfo;

@@ -1,4 +1,4 @@
-package com.example.aralikliyuruyus;
+package com.codenzi.aralikliyuruyus;
 
 import android.Manifest;
 import android.animation.ArgbEvaluator;

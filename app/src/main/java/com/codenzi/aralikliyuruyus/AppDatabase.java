@@ -1,4 +1,4 @@
-package com.example.aralikliyuruyus;
+package com.codenzi.aralikliyuruyus;
 
 import android.content.Context;
 import androidx.room.Database;

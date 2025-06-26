@@ -1,9 +1,8 @@
-package com.example.aralikliyuruyus;
+package com.codenzi.aralikliyuruyus;
 
 import android.os.Bundle;
 import android.widget.CalendarView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;

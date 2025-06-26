@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.aralikliyuruyus"
+    namespace = "com.codenzi.aralikliyuruyus"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.aralikliyuruyus"
+        applicationId = "com.codenzi.aralikliyuruyus"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
