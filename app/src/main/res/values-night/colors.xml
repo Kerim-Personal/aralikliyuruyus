@@ -1,33 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#00E0A8</color>
-    <color name="onPrimary">#00382F</color>
-    <color name="primaryContainer">#005044</color>
-    <color name="onPrimaryContainer">#7BF8E5</color>
+    <color name="primary">#81D4FA</color> <color name="onPrimary">#01579B</color>
+    <color name="secondary">#81D4FA</color> <color name="onSecondary">#01579B</color>
 
-    <color name="secondary">#00E0A8</color>
-    <color name="onSecondary">#00382F</color>
-    <color name="secondaryContainer">#005044</color>
-    <color name="onSecondaryContainer">#7BF8E5</color>
+    <color name="background">#121212</color> <color name="onBackground">#E0E0E0</color> <color name="surface">#121212</color>
+    <color name="onSurface">#E0E0E0</color>
+    <color name="stop_button_color">#EF9A9A</color> <color name="progress_bar_background">#333333</color>
 
-    <color name="tertiary">#ACCBE4</color>
-    <color name="onTertiary">#123348</color>
-    <color name="tertiaryContainer">#2B4A5F</color>
-    <color name="onTertiaryContainer">#C8E6FF</color>
+    <color name="primaryContainer">#0277BD</color>
+    <color name="onPrimaryContainer">#E1F5FE</color>
+    <color name="secondaryContainer">#0277BD</color>
+    <color name="onSecondaryContainer">#E1F5FE</color>
+    <color name="tertiary">#757575</color>
+    <color name="onTertiary">#E0E0E0</color>
+    <color name="tertiaryContainer">#424242</color>
+    <color name="onTertiaryContainer">#BDBDBD</color>
+    <color name="error">#E57373</color>
+    <color name="onError">#121212</color>
+    <color name="surfaceVariant">#424242</color>
+    <color name="onSurfaceVariant">#BDBDBD</color>
+    <color name="outline">#757575</color>
 
-    <color name="error">#FFB4AB</color>
-    <color name="onError">#690005</color>
-    <color name="background">#23272A</color>
-    <color name="onBackground">#E1E3E1</color>
-    <color name="surface">#23272A</color>
-    <color name="onSurface">#E1E3E1</color>
-    <color name="surfaceVariant">#3F4946</color>
-    <color name="onSurfaceVariant">#BFC9C5</color>
-    <color name="outline">#89938F</color>
+    <color name="idle_gradient_start">#1A1A1A</color>
+    <color name="idle_gradient_end">#121212</color>
 
-    <color name="stop_button_color">#EF9A9A</color>
-    <color name="progress_bar_background">#36393F</color>
-    <color name="background_default">#23272A</color>
-    <color name="background_slow_tint">#2A3B36</color>
-    <color name="background_fast_tint">#2C2F4D</color>
+    <color name="slow_gradient_start">#1F2937</color> <color name="slow_gradient_end">#111827</color> <color name="fast_gradient_start">#311B92</color> <color name="fast_gradient_end">#1A237E</color> <color name="paused_gradient_start">#212121</color>
+    <color name="paused_gradient_end">#191919</color>
 </resources>

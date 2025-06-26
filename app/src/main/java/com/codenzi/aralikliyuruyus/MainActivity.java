@@ -1,15 +1,14 @@
 package com.codenzi.aralikliyuruyus;
 
 import android.Manifest;
-import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
-import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.TransitionDrawable;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -18,6 +17,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.speech.tts.TextToSpeech;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
@@ -25,10 +25,17 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+
+import com.google.android.material.navigation.NavigationView;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -36,14 +43,14 @@ import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public class MainActivity extends AppCompatActivity implements SensorEventListener {
+public class MainActivity extends AppCompatActivity implements SensorEventListener, NavigationView.OnNavigationItemSelectedListener {
 
-    private static final long TOTAL_WORKOUT_TIME_MS = 4 * 60 * 1000;
+    private static final long TOTAL_WORKOUT_TIME_MS = 30 * 60 * 1000;
     private static final long INTERVAL_TIME_MS = 3 * 60 * 1000;
     private static final int ACTIVITY_RECOGNITION_REQUEST_CODE = 100;
 
     private TextView tvInstruction, tvTimer, tvIntervalTimer, tvStepCount;
-    private Button btnStartStop, btnReset, btnHistory;
+    private Button btnStartStop, btnReset;
     private ProgressBar progressBarTotal, progressBarInterval;
     private CountDownTimer workoutTimer, intervalTimer;
     private SensorManager sensorManager;
@@ -57,7 +64,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private long workoutTimeRemaining, intervalTimeRemaining;
     private boolean isWorkoutPaused = false;
     private View mainLayout;
-    private int currentBackgroundColor;
+
+    private DrawerLayout drawerLayout;
+    private ActionBarDrawerToggle drawerToggle;
+    private NavigationView navigationView;
+    private Toolbar toolbar;
 
 
     @Override
@@ -68,23 +79,23 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         initViews();
         initializeTextToSpeech();
 
+        setSupportActionBar(toolbar);
+        drawerToggle = new ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
+        drawerLayout.addDrawerListener(drawerToggle);
+        drawerToggle.syncState();
+        navigationView.setNavigationItemSelectedListener(this);
+
         btnStartStop.setOnClickListener(v -> {
             if (isWorkoutRunning) {
                 pauseWorkout();
-            } else if(isWorkoutPaused){
+            } else if (isWorkoutPaused) {
                 resumeWorkout();
-            }
-            else {
+            } else {
                 checkAndStartWorkout();
             }
         });
 
         btnReset.setOnClickListener(v -> resetWorkout());
-
-        btnHistory.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
-            startActivity(intent);
-        });
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
@@ -98,7 +109,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         tvStepCount = findViewById(R.id.tvStepCount);
         btnStartStop = findViewById(R.id.btnStartStop);
         btnReset = findViewById(R.id.btnReset);
-        btnHistory = findViewById(R.id.btnHistory);
+        toolbar = findViewById(R.id.toolbar);
+        drawerLayout = findViewById(R.id.drawer_layout);
+        navigationView = findViewById(R.id.nav_view);
         mainLayout = findViewById(R.id.main_layout);
         progressBarTotal = findViewById(R.id.progress_bar_total);
         progressBarInterval = findViewById(R.id.progress_bar_interval);
@@ -117,6 +130,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 Toast.makeText(this, R.string.tts_init_failed_toast, Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private void animateBackground(int newDrawableResId) {
+        Drawable oldDrawable = mainLayout.getBackground();
+        Drawable newDrawable = ContextCompat.getDrawable(this, newDrawableResId);
+        TransitionDrawable transitionDrawable = new TransitionDrawable(new Drawable[]{oldDrawable, newDrawable});
+        mainLayout.setBackground(transitionDrawable);
+        transitionDrawable.startTransition(1000);
     }
 
     private void checkAndStartWorkout() {
@@ -142,7 +163,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.stop_button_color));
 
         btnReset.setVisibility(View.INVISIBLE);
-        btnHistory.setVisibility(View.INVISIBLE);
 
         tvStepCount.setText(getString(R.string.initial_step_count));
         startTotalWorkoutTimer(TOTAL_WORKOUT_TIME_MS);
@@ -158,6 +178,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sessionStepCount = 0;
 
         speak(getString(R.string.tts_workout_stopped));
+        animateBackground(R.drawable.gradient_idle);
         updateUIToInitialState();
     }
 
@@ -175,14 +196,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
 
         btnReset.setVisibility(View.VISIBLE);
-        btnHistory.setVisibility(View.VISIBLE);
 
-        animateBackgroundColor(ContextCompat.getColor(this, R.color.background_default));
+        animateBackground(R.drawable.gradient_paused);
         speak(getString(R.string.tts_workout_paused));
     }
 
-    private void resumeWorkout(){
-        if(!isWorkoutPaused) return;
+    private void resumeWorkout() {
+        if (!isWorkoutPaused) return;
 
         isWorkoutRunning = true;
         isWorkoutPaused = false;
@@ -191,19 +211,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.stop_button_color));
 
         btnReset.setVisibility(View.INVISIBLE);
-        btnHistory.setVisibility(View.INVISIBLE);
 
         int instructionResId = isHighIntensity ? R.string.instruction_go_fast : R.string.instruction_go_slow;
         tvInstruction.setText(instructionResId);
         speak(getString(instructionResId));
 
-        int colorTo = isHighIntensity ? R.color.background_fast_tint : R.color.background_slow_tint;
-        animateBackgroundColor(ContextCompat.getColor(this, colorTo));
+        int gradientResId = isHighIntensity ? R.drawable.gradient_fast : R.drawable.gradient_slow;
+        animateBackground(gradientResId);
 
         startTotalWorkoutTimer(workoutTimeRemaining);
         startIntervalTimer(intervalTimeRemaining);
     }
-
 
     private void startTotalWorkoutTimer(long duration) {
         workoutTimer = new CountDownTimer(duration, 1000) {
@@ -214,6 +232,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 int progress = (int) ((millisUntilFinished * 100) / TOTAL_WORKOUT_TIME_MS);
                 progressBarTotal.setProgress(progress);
             }
+
             @Override
             public void onFinish() {
                 finishWorkout();
@@ -222,7 +241,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private void startNextInterval() {
-        if (cycleCount >= 10) {
+        if (cycleCount >= (TOTAL_WORKOUT_TIME_MS / INTERVAL_TIME_MS)) {
             finishWorkout();
             return;
         }
@@ -233,12 +252,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         int instructionResId = isHighIntensity ? R.string.instruction_go_fast : R.string.instruction_go_slow;
         animateInstructionChange(instructionResId, getString(instructionResId));
 
-        int colorTo = isHighIntensity ? R.color.background_fast_tint : R.color.background_slow_tint;
-        animateBackgroundColor(ContextCompat.getColor(this, colorTo));
+        int gradientResId = isHighIntensity ? R.drawable.gradient_fast : R.drawable.gradient_slow;
+        animateBackground(gradientResId);
 
         startIntervalTimer(INTERVAL_TIME_MS);
     }
-
 
     private void startIntervalTimer(long duration) {
         intervalTimer = new CountDownTimer(duration, 1000) {
@@ -249,8 +267,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 int progress = (int) ((millisUntilFinished * 100) / INTERVAL_TIME_MS);
                 progressBarInterval.setProgress(progress);
             }
+
             @Override
-            public void onFinish() { startNextInterval(); }
+            public void onFinish() {
+                startNextInterval();
+            }
         }.start();
     }
 
@@ -260,7 +281,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         fadeOut.setAnimationListener(new Animation.AnimationListener() {
             @Override
-            public void onAnimationStart(Animation animation) {}
+            public void onAnimationStart(Animation animation) {
+            }
 
             @Override
             public void onAnimationEnd(Animation animation) {
@@ -269,25 +291,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
 
             @Override
-            public void onAnimationRepeat(Animation animation) {}
+            public void onAnimationRepeat(Animation animation) {
+            }
         });
 
         tvInstruction.startAnimation(fadeOut);
         speak(ttsText);
     }
-
-    private void animateBackgroundColor(int colorTo) {
-        int colorFrom = (mainLayout.getBackground() instanceof ColorDrawable) ?
-                ((ColorDrawable) mainLayout.getBackground()).getColor() :
-                ContextCompat.getColor(this, R.color.background);
-
-        ValueAnimator colorAnimation = ValueAnimator.ofObject(new ArgbEvaluator(), colorFrom, colorTo);
-        colorAnimation.setDuration(500);
-        colorAnimation.addUpdateListener(animator -> mainLayout.setBackgroundColor((int) animator.getAnimatedValue()));
-        colorAnimation.start();
-        currentBackgroundColor = colorTo;
-    }
-
 
     private void finishWorkout() {
         isWorkoutRunning = false;
@@ -300,9 +310,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
 
         btnReset.setVisibility(View.VISIBLE);
-        btnHistory.setVisibility(View.VISIBLE);
 
-        animateBackgroundColor(ContextCompat.getColor(this, R.color.background_default));
+        animateBackground(R.drawable.gradient_idle);
         speak(getString(R.string.tts_workout_complete));
         saveWorkoutSession();
     }
@@ -339,15 +348,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
 
         btnReset.setVisibility(View.INVISIBLE);
-        btnHistory.setVisibility(View.VISIBLE);
 
         updateTimerText(tvTimer, TOTAL_WORKOUT_TIME_MS);
         updateTimerText(tvIntervalTimer, INTERVAL_TIME_MS);
         tvStepCount.setText(R.string.initial_step_count);
         progressBarTotal.setProgress(100);
         progressBarInterval.setProgress(100);
-        mainLayout.setBackgroundColor(ContextCompat.getColor(this, R.color.background_default));
-        currentBackgroundColor = ContextCompat.getColor(this, R.color.background_default);
+        mainLayout.setBackgroundResource(R.drawable.gradient_idle);
     }
 
 
@@ -363,7 +370,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             sessionStepCount++;
             tvStepCount.setText(String.valueOf(sessionStepCount));
 
-            // Adım sayacı için zıplama efekti
             PropertyValuesHolder pvhX = PropertyValuesHolder.ofFloat("scaleX", 1.0f, 1.2f, 1.0f);
             PropertyValuesHolder pvhY = PropertyValuesHolder.ofFloat("scaleY", 1.0f, 1.2f, 1.0f);
             ObjectAnimator.ofPropertyValuesHolder(tvStepCount, pvhX, pvhY).setDuration(200).start();
@@ -371,7 +377,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
 
 
     @Override
@@ -386,7 +393,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onPause() {
         super.onPause();
-        if(isWorkoutRunning){
+        if (isWorkoutRunning) {
             pauseWorkout();
         }
 
@@ -414,5 +421,25 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 Toast.makeText(this, R.string.permission_denied_toast, Toast.LENGTH_LONG).show();
             }
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START);
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        int id = item.getItemId();
+        if (id == R.id.nav_history) {
+            Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
+            startActivity(intent);
+        }
+        drawerLayout.closeDrawer(GravityCompat.START);
+        return true;
     }
 }

@@ -1,6 +1,6 @@
 <resources>
 
-    <string name="app_name">AralikliYuruyus</string>
+    <string name="app_name">Aralıklı Yürüyüş</string>
 
     <string name="workout_steps_label">Antrenman Adımları</string>
     <string name="initial_step_count">0</string>
@@ -30,5 +30,9 @@
 
     <string name="title_activity_history">Antrenman Geçmişi</string>
     <string name="button_history">Geçmiş</string>
+
+    <string name="navigation_drawer_open">Navigasyon menüsünü aç</string>
+    <string name="navigation_drawer_close">Navigasyon menüsünü kapat</string>
+
 
 </resources>
