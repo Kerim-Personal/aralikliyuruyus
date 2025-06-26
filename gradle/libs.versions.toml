@@ -1,6 +1,6 @@
 [versions]
 agp = "8.10.1"
-kotlin = "1.9.23"  # BU SATIRI EKLEYİN
+kotlin = "1.9.23"
 junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
@@ -8,6 +8,9 @@ appcompat = "1.7.1"
 material = "1.12.0"
 activity = "1.10.1"
 constraintlayout = "2.2.1"
+room = "2.6.1"
+
+
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -18,8 +21,14 @@ material = { group = "com.google.android.material", name = "material", version.r
 activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 
-# ROOM için gerekli olan Kotlin eklentileri
+
+# ROOM Kütüphaneleri (EKLENDİ)
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" } # BU SATIRI EKLEYİN
-kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }       # BU SATIRI EKLEYİN
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+
