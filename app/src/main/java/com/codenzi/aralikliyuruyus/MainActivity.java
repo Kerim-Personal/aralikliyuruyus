@@ -3,20 +3,16 @@ package com.codenzi.aralikliyuruyus;
 import android.Manifest;
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
-import android.annotation.SuppressLint;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.CountDownTimer;
-import android.speech.tts.TextToSpeech;
+import android.os.IBinder;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.Animation;
@@ -37,69 +33,141 @@ import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.google.android.material.navigation.NavigationView;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.util.ArrayList;
 import java.util.Locale;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public class MainActivity extends AppCompatActivity implements SensorEventListener, NavigationView.OnNavigationItemSelectedListener {
+public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener, WorkoutService.WorkoutListener {
 
+    private static final int PERMISSIONS_REQUEST_CODE = 101; // Tek bir istek kodu kullanacağız
     private static final long TOTAL_WORKOUT_TIME_MS = 30 * 60 * 1000;
     private static final long INTERVAL_TIME_MS = 3 * 60 * 1000;
-    private static final int ACTIVITY_RECOGNITION_REQUEST_CODE = 100;
 
     private TextView tvInstruction, tvTimer, tvIntervalTimer, tvStepCount;
     private Button btnStartStop, btnReset;
     private ProgressBar progressBarTotal, progressBarInterval;
-    private CountDownTimer workoutTimer, intervalTimer;
-    private SensorManager sensorManager;
-    private Sensor stepDetectorSensor;
-    private int sessionStepCount = 0;
-    private boolean isWorkoutRunning = false, isHighIntensity = false;
-    private int cycleCount = 0;
-    private TextToSpeech textToSpeech;
-    private boolean isTtsInitialized = false;
-
-    private long workoutTimeRemaining, intervalTimeRemaining;
-    private boolean isWorkoutPaused = false;
     private View mainLayout;
-
     private DrawerLayout drawerLayout;
-    private ActionBarDrawerToggle drawerToggle;
     private NavigationView navigationView;
     private Toolbar toolbar;
 
+    private WorkoutService workoutService;
+    private boolean isBound = false;
+
+    private final ServiceConnection connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            WorkoutService.LocalBinder binder = (WorkoutService.LocalBinder) service;
+            workoutService = binder.getService();
+            isBound = true;
+            workoutService.setListener(MainActivity.this);
+            updateUIFromServiceState();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            isBound = false;
+            workoutService = null;
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         initViews();
-        initializeTextToSpeech();
 
         setSupportActionBar(toolbar);
-        drawerToggle = new ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
+        ActionBarDrawerToggle drawerToggle = new ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
         drawerLayout.addDrawerListener(drawerToggle);
         drawerToggle.syncState();
         navigationView.setNavigationItemSelectedListener(this);
 
-        btnStartStop.setOnClickListener(v -> {
-            if (isWorkoutRunning) {
-                pauseWorkout();
-            } else if (isWorkoutPaused) {
-                resumeWorkout();
-            } else {
-                checkAndStartWorkout();
-            }
-        });
+        btnStartStop.setOnClickListener(v -> handleStartStopClick());
+        btnReset.setOnClickListener(v -> handleResetClick());
 
-        btnReset.setOnClickListener(v -> resetWorkout());
-
-        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
         updateUIToInitialState();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Bind to WorkoutService
+        Intent intent = new Intent(this, WorkoutService.class);
+        bindService(intent, connection, Context.BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (isBound) {
+            workoutService.setListener(null); // prevent memory leaks
+            unbindService(connection);
+            isBound = false;
+        }
+    }
+
+    private void handleStartStopClick() {
+        if (!isBound) return;
+
+        if (workoutService.isWorkoutRunning) {
+            // PAUSE
+            Intent intent = new Intent(this, WorkoutService.class);
+            intent.setAction(WorkoutService.ACTION_PAUSE_WORKOUT);
+            startService(intent);
+        } else if (workoutService.isWorkoutPaused) {
+            // RESUME
+            Intent intent = new Intent(this, WorkoutService.class);
+            intent.setAction(WorkoutService.ACTION_RESUME_WORKOUT);
+            startService(intent);
+        } else {
+            // START
+            checkAndStartWorkout();
+        }
+    }
+
+    private void handleResetClick() {
+        if (isBound && (workoutService.isWorkoutPaused || !workoutService.isWorkoutRunning)) {
+            Intent intent = new Intent(this, WorkoutService.class);
+            intent.setAction(WorkoutService.ACTION_RESET_WORKOUT);
+            startService(intent);
+            updateUIToInitialState();
+        }
+    }
+
+    private void checkAndStartWorkout() {
+        // Gerekli izinlerin listesi oluşturuluyor
+        ArrayList<String> permissionsToRequest = new ArrayList<>();
+
+        // Android 10 (Q) ve üzeri için ACTIVITY_RECOGNITION izni
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.ACTIVITY_RECOGNITION);
+            }
+        }
+
+        // Android 13 (TIRAMISU) ve üzeri için POST_NOTIFICATIONS izni
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+
+        // İstenecek izin varsa, kullanıcıdan istenir
+        if (!permissionsToRequest.isEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsToRequest.toArray(new String[0]), PERMISSIONS_REQUEST_CODE);
+        } else {
+            // Tüm izinler zaten verilmiş, servis başlatılabilir
+            startWorkoutService();
+        }
+    }
+
+
+    private void startWorkoutService() {
+        Intent intent = new Intent(this, WorkoutService.class);
+        intent.setAction(WorkoutService.ACTION_START_WORKOUT);
+        ContextCompat.startForegroundService(this, intent);
+        bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
 
     private void initViews() {
@@ -117,223 +185,33 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         progressBarInterval = findViewById(R.id.progress_bar_interval);
     }
 
-    private void initializeTextToSpeech() {
-        textToSpeech = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                int result = textToSpeech.setLanguage(new Locale("tr", "TR"));
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Toast.makeText(this, R.string.tts_not_supported_toast, Toast.LENGTH_SHORT).show();
-                } else {
-                    isTtsInitialized = true;
-                }
-            } else {
-                Toast.makeText(this, R.string.tts_init_failed_toast, Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-
     private void animateBackground(int newDrawableResId) {
         Drawable oldDrawable = mainLayout.getBackground();
         Drawable newDrawable = ContextCompat.getDrawable(this, newDrawableResId);
-        TransitionDrawable transitionDrawable = new TransitionDrawable(new Drawable[]{oldDrawable, newDrawable});
-        mainLayout.setBackground(transitionDrawable);
-        transitionDrawable.startTransition(1000);
-    }
-
-    private void checkAndStartWorkout() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, ACTIVITY_RECOGNITION_REQUEST_CODE);
-            } else {
-                startWorkout();
-            }
-        } else {
-            startWorkout();
+        if (oldDrawable != null && newDrawable != null) {
+            TransitionDrawable transitionDrawable = new TransitionDrawable(new Drawable[]{oldDrawable, newDrawable});
+            mainLayout.setBackground(transitionDrawable);
+            transitionDrawable.startTransition(1000);
+        } else if (newDrawable != null) {
+            mainLayout.setBackground(newDrawable);
         }
     }
 
-    private void startWorkout() {
-        isWorkoutRunning = true;
-        isWorkoutPaused = false;
-        isHighIntensity = false;
-        cycleCount = 0;
-        sessionStepCount = 0;
-
-        btnStartStop.setText(R.string.button_stop_workout);
-        btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.stop_button_color));
-
-        btnReset.setVisibility(View.INVISIBLE);
-
-        tvStepCount.setText(getString(R.string.initial_step_count));
-        startTotalWorkoutTimer(TOTAL_WORKOUT_TIME_MS);
-        startNextInterval();
-    }
-
-    private void resetWorkout() {
-        if (workoutTimer != null) workoutTimer.cancel();
-        if (intervalTimer != null) intervalTimer.cancel();
-
-        isWorkoutRunning = false;
-        isWorkoutPaused = false;
-        sessionStepCount = 0;
-
-        speak(getString(R.string.tts_workout_stopped));
-        animateBackground(R.drawable.gradient_idle);
-        updateUIToInitialState();
-    }
-
-    private void pauseWorkout() {
-        if (!isWorkoutRunning) return;
-
-        isWorkoutRunning = false;
-        isWorkoutPaused = true;
-
-        if (workoutTimer != null) workoutTimer.cancel();
-        if (intervalTimer != null) intervalTimer.cancel();
-
-        tvInstruction.setText(R.string.instruction_workout_paused);
-        btnStartStop.setText(R.string.button_resume_workout);
-        btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
-
-        btnReset.setVisibility(View.VISIBLE);
-
-        animateBackground(R.drawable.gradient_paused);
-        speak(getString(R.string.tts_workout_paused));
-    }
-
-    private void resumeWorkout() {
-        if (!isWorkoutPaused) return;
-
-        isWorkoutRunning = true;
-        isWorkoutPaused = false;
-
-        btnStartStop.setText(R.string.button_stop_workout);
-        btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.stop_button_color));
-
-        btnReset.setVisibility(View.INVISIBLE);
-
-        int instructionResId = isHighIntensity ? R.string.instruction_go_fast : R.string.instruction_go_slow;
-        tvInstruction.setText(instructionResId);
-        speak(getString(instructionResId));
-
-        int gradientResId = isHighIntensity ? R.drawable.gradient_fast : R.drawable.gradient_slow;
-        animateBackground(gradientResId);
-
-        startTotalWorkoutTimer(workoutTimeRemaining);
-        startIntervalTimer(intervalTimeRemaining);
-    }
-
-    private void startTotalWorkoutTimer(long duration) {
-        workoutTimer = new CountDownTimer(duration, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                workoutTimeRemaining = millisUntilFinished;
-                updateTimerText(tvTimer, millisUntilFinished);
-                int progress = (int) ((millisUntilFinished * 100) / TOTAL_WORKOUT_TIME_MS);
-                progressBarTotal.setProgress(progress);
-            }
-
-            @Override
-            public void onFinish() {
-                finishWorkout();
-            }
-        }.start();
-    }
-
-    private void startNextInterval() {
-        if (cycleCount >= (TOTAL_WORKOUT_TIME_MS / INTERVAL_TIME_MS)) {
-            finishWorkout();
-            return;
-        }
-
-        isHighIntensity = !isHighIntensity;
-        cycleCount++;
-
-        int instructionResId = isHighIntensity ? R.string.instruction_go_fast : R.string.instruction_go_slow;
-        animateInstructionChange(instructionResId, getString(instructionResId));
-
-        int gradientResId = isHighIntensity ? R.drawable.gradient_fast : R.drawable.gradient_slow;
-        animateBackground(gradientResId);
-
-        startIntervalTimer(INTERVAL_TIME_MS);
-    }
-
-    private void startIntervalTimer(long duration) {
-        intervalTimer = new CountDownTimer(duration, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                intervalTimeRemaining = millisUntilFinished;
-                updateTimerText(tvIntervalTimer, millisUntilFinished);
-                int progress = (int) ((millisUntilFinished * 100) / INTERVAL_TIME_MS);
-                progressBarInterval.setProgress(progress);
-            }
-
-            @Override
-            public void onFinish() {
-                startNextInterval();
-            }
-        }.start();
-    }
-
-    private void animateInstructionChange(int instructionResId, String ttsText) {
+    private void animateInstructionChange(int instructionResId) {
         final Animation fadeOut = AnimationUtils.loadAnimation(this, R.anim.fade_out);
         final Animation fadeIn = AnimationUtils.loadAnimation(this, R.anim.fade_in);
 
         fadeOut.setAnimationListener(new Animation.AnimationListener() {
-            @Override
-            public void onAnimationStart(Animation animation) {
-            }
-
-            @Override
-            public void onAnimationEnd(Animation animation) {
+            @Override public void onAnimationStart(Animation animation) { }
+            @Override public void onAnimationEnd(Animation animation) {
                 tvInstruction.setText(instructionResId);
                 tvInstruction.startAnimation(fadeIn);
             }
-
-            @Override
-            public void onAnimationRepeat(Animation animation) {
-            }
+            @Override public void onAnimationRepeat(Animation animation) { }
         });
-
         tvInstruction.startAnimation(fadeOut);
-        speak(ttsText);
     }
 
-    private void finishWorkout() {
-        isWorkoutRunning = false;
-        isWorkoutPaused = false;
-
-        if (workoutTimer != null) workoutTimer.cancel();
-        if (intervalTimer != null) intervalTimer.cancel();
-        tvInstruction.setText(R.string.instruction_workout_finished);
-        btnStartStop.setText(R.string.button_start_workout);
-        btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
-
-        btnReset.setVisibility(View.VISIBLE);
-
-        animateBackground(R.drawable.gradient_idle);
-        speak(getString(R.string.tts_workout_complete));
-        saveWorkoutSession();
-    }
-
-    private void saveWorkoutSession() {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        String currentDate = sdf.format(new Date());
-
-        long durationInSeconds = (TOTAL_WORKOUT_TIME_MS - workoutTimeRemaining) / 1000;
-
-        WorkoutSession session = new WorkoutSession(currentDate, sessionStepCount, durationInSeconds);
-
-        Executors.newSingleThreadExecutor().execute(() -> {
-            AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
-            db.workoutDao().insertSession(session);
-        });
-
-        Toast.makeText(this, "Antrenman kaydedildi!", Toast.LENGTH_SHORT).show();
-    }
-
-
-    @SuppressLint("SetTextI18n")
     private void updateTimerText(TextView timerView, long millis) {
         String time = String.format(Locale.getDefault(), "%02d:%02d",
                 TimeUnit.MILLISECONDS.toMinutes(millis),
@@ -346,9 +224,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         tvInstruction.setText(R.string.instruction_ready);
         btnStartStop.setText(R.string.button_start_workout);
         btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
-
         btnReset.setVisibility(View.INVISIBLE);
-
         updateTimerText(tvTimer, TOTAL_WORKOUT_TIME_MS);
         updateTimerText(tvIntervalTimer, INTERVAL_TIME_MS);
         tvStepCount.setText(R.string.initial_step_count);
@@ -357,71 +233,118 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         mainLayout.setBackgroundResource(R.drawable.gradient_idle);
     }
 
+    private void updateUIFromServiceState() {
+        if (!isBound || workoutService == null) return;
 
-    private void speak(String text) {
-        if (isTtsInitialized) textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
-    }
+        onStateChange(workoutService.isWorkoutRunning, workoutService.isWorkoutPaused);
+        onTimerUpdate(workoutService.getWorkoutTimeRemaining(), workoutService.getIntervalTimeRemaining());
+        onStepUpdate(workoutService.getSessionStepCount());
 
-
-    @SuppressLint("SetTextI18n")
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR && (isWorkoutRunning)) {
-            sessionStepCount++;
-            tvStepCount.setText(String.valueOf(sessionStepCount));
-
-            PropertyValuesHolder pvhX = PropertyValuesHolder.ofFloat("scaleX", 1.0f, 1.2f, 1.0f);
-            PropertyValuesHolder pvhY = PropertyValuesHolder.ofFloat("scaleY", 1.0f, 1.2f, 1.0f);
-            ObjectAnimator.ofPropertyValuesHolder(tvStepCount, pvhX, pvhY).setDuration(200).start();
+        int instructionResId;
+        int backgroundResId;
+        if(workoutService.isWorkoutPaused){
+            instructionResId = R.string.instruction_workout_paused;
+            backgroundResId = R.drawable.gradient_paused;
+        } else if (workoutService.isWorkoutRunning) {
+            instructionResId = workoutService.isHighIntensity ? R.string.instruction_go_fast : R.string.instruction_go_slow;
+            backgroundResId = workoutService.isHighIntensity ? R.drawable.gradient_fast : R.drawable.gradient_slow;
+        } else {
+            instructionResId = R.string.instruction_ready;
+            backgroundResId = R.drawable.gradient_idle;
         }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
-    }
-
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (stepDetectorSensor != null) {
-            sensorManager.registerListener(this, stepDetectorSensor, SensorManager.SENSOR_DELAY_FASTEST);
-        }
-    }
-
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (isWorkoutRunning) {
-            pauseWorkout();
-        }
-
-        if (stepDetectorSensor != null) {
-            sensorManager.unregisterListener(this);
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-            textToSpeech.shutdown();
-        }
-        super.onDestroy();
+        tvInstruction.setText(instructionResId);
+        mainLayout.setBackgroundResource(backgroundResId);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == ACTIVITY_RECOGNITION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startWorkout();
+        if (requestCode == PERMISSIONS_REQUEST_CODE) {
+            boolean allGranted = true;
+            if (grantResults.length == 0) { // Kullanıcı hiçbir şey seçmeden dialog'u kapatırsa
+                allGranted = false;
             } else {
-                Toast.makeText(this, R.string.permission_denied_toast, Toast.LENGTH_LONG).show();
+                for (int grantResult : grantResults) {
+                    if (grantResult != PackageManager.PERMISSION_GRANTED) {
+                        allGranted = false;
+                        break;
+                    }
+                }
+            }
+
+            if (allGranted) {
+                // Tüm izinler verildi, servisi başlat
+                startWorkoutService();
+            } else {
+                // En az bir izin reddedildi
+                Toast.makeText(this, "Antrenmanı başlatmak için gerekli izinler verilmedi.", Toast.LENGTH_LONG).show();
             }
         }
     }
+
+
+    // --- Service Listener Callbacks ---
+
+    @Override
+    public void onTimerUpdate(long totalMillis, long intervalMillis) {
+        runOnUiThread(() -> {
+            updateTimerText(tvTimer, totalMillis);
+            updateTimerText(tvIntervalTimer, intervalMillis);
+            progressBarTotal.setProgress((int) ((totalMillis * 100) / TOTAL_WORKOUT_TIME_MS));
+            progressBarInterval.setProgress((int) ((intervalMillis * 100) / INTERVAL_TIME_MS));
+        });
+    }
+
+    @Override
+    public void onStepUpdate(int steps) {
+        runOnUiThread(() -> {
+            tvStepCount.setText(String.valueOf(steps));
+            PropertyValuesHolder pvhX = PropertyValuesHolder.ofFloat("scaleX", 1.0f, 1.2f, 1.0f);
+            PropertyValuesHolder pvhY = PropertyValuesHolder.ofFloat("scaleY", 1.0f, 1.2f, 1.0f);
+            ObjectAnimator.ofPropertyValuesHolder(tvStepCount, pvhX, pvhY).setDuration(200).start();
+        });
+    }
+
+    @Override
+    public void onInstructionUpdate(int instructionResId, int backgroundResId) {
+        runOnUiThread(() -> {
+            animateInstructionChange(instructionResId);
+            animateBackground(backgroundResId);
+        });
+    }
+
+    @Override
+    public void onStateChange(boolean isRunning, boolean isPaused) {
+        runOnUiThread(() -> {
+            if (isPaused) {
+                btnStartStop.setText(R.string.button_resume_workout);
+                btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
+                btnReset.setVisibility(View.VISIBLE);
+            } else if (isRunning) {
+                btnStartStop.setText(R.string.button_stop_workout);
+                btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.stop_button_color));
+                btnReset.setVisibility(View.INVISIBLE);
+            } else {
+                btnStartStop.setText(R.string.button_start_workout);
+                btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
+                btnReset.setVisibility(View.INVISIBLE);
+            }
+        });
+    }
+
+    @Override
+    public void onWorkoutFinished() {
+        runOnUiThread(()-> {
+            Toast.makeText(this, "Antrenman kaydedildi!", Toast.LENGTH_SHORT).show();
+            tvInstruction.setText(R.string.instruction_workout_finished);
+            btnStartStop.setText(R.string.button_start_workout);
+            btnStartStop.setBackgroundColor(ContextCompat.getColor(this, R.color.primary));
+            btnReset.setVisibility(View.VISIBLE);
+            animateBackground(R.drawable.gradient_idle);
+        });
+    }
+
+    // --- Navigation ---
 
     @Override
     public void onBackPressed() {

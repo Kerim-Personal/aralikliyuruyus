@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
 
     <application
         android:allowBackup="true"
@@ -28,6 +32,12 @@
             android:name=".HistoryActivity"
             android:label="@string/title_activity_history"
             android:parentActivityName=".MainActivity" />
+
+        <service
+            android:name=".WorkoutService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="health" />
 
     </application>
 
