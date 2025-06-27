@@ -15,8 +15,8 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.CountDownTimer;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.speech.tts.TextToSpeech;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -57,19 +57,12 @@ public class WorkoutService extends Service implements SensorEventListener {
     private TextToSpeech textToSpeech;
     private boolean isTtsInitialized = false;
     private WorkoutListener listener;
+    private PowerManager.WakeLock wakeLock;
 
-    // GETTER METODLARI EKLENDİ
-    public long getWorkoutTimeRemaining() {
-        return workoutTimeRemaining;
-    }
-
-    public long getIntervalTimeRemaining() {
-        return intervalTimeRemaining;
-    }
-
-    public int getSessionStepCount() {
-        return sessionStepCount;
-    }
+    // GETTER METODLARI
+    public long getWorkoutTimeRemaining() { return workoutTimeRemaining; }
+    public long getIntervalTimeRemaining() { return intervalTimeRemaining; }
+    public int getSessionStepCount() { return sessionStepCount; }
 
     public class LocalBinder extends Binder {
         WorkoutService getService() {
@@ -91,6 +84,9 @@ public class WorkoutService extends Service implements SensorEventListener {
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
         initializeTextToSpeech();
+
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Aralikliyuruyus::WorkoutWakelockTag");
     }
 
     @Override
@@ -114,19 +110,20 @@ public class WorkoutService extends Service implements SensorEventListener {
         return START_STICKY;
     }
 
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return binder;
+    private void stopTimersAndReleaseWakelock() {
+        if (workoutTimer != null) workoutTimer.cancel();
+        if (intervalTimer != null) intervalTimer.cancel();
+        if (wakeLock.isHeld()) {
+            wakeLock.release();
+        }
     }
-
-    public void setListener(WorkoutListener listener) {
-        this.listener = listener;
-    }
-
-    // --- WORKOUT LOGIC ---
 
     private void startWorkout() {
+        if (isWorkoutRunning) return;
+        if (!wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
+
         isWorkoutRunning = true;
         isWorkoutPaused = false;
         isHighIntensity = false;
@@ -149,9 +146,7 @@ public class WorkoutService extends Service implements SensorEventListener {
 
         isWorkoutRunning = false;
         isWorkoutPaused = true;
-
-        if (workoutTimer != null) workoutTimer.cancel();
-        if (intervalTimer != null) intervalTimer.cancel();
+        stopTimersAndReleaseWakelock();
 
         speak(getString(R.string.tts_workout_paused));
         if (listener != null) {
@@ -164,6 +159,9 @@ public class WorkoutService extends Service implements SensorEventListener {
     private void resumeWorkout() {
         if (!isWorkoutPaused) return;
 
+        if (!wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
         isWorkoutRunning = true;
         isWorkoutPaused = false;
 
@@ -184,44 +182,35 @@ public class WorkoutService extends Service implements SensorEventListener {
     }
 
     private void resetWorkout() {
-        if (workoutTimer != null) workoutTimer.cancel();
-        if (intervalTimer != null) intervalTimer.cancel();
-
+        stopTimersAndReleaseWakelock();
         isWorkoutRunning = false;
         isWorkoutPaused = false;
         sessionStepCount = 0;
 
-        speak(getString(R.string.tts_workout_stopped));
-        sensorManager.unregisterListener(this);
+        if(sensorManager != null) sensorManager.unregisterListener(this);
         if (listener != null) {
             listener.onInstructionUpdate(R.string.instruction_ready, R.drawable.gradient_idle);
             listener.onStateChange(isWorkoutRunning, isWorkoutPaused);
             listener.onTimerUpdate(TOTAL_WORKOUT_TIME_MS, INTERVAL_TIME_MS);
             listener.onStepUpdate(0);
         }
-
         stopForeground(true);
         stopSelf();
     }
 
     private void finishWorkout() {
-        if (workoutTimer != null) workoutTimer.cancel();
-        if (intervalTimer != null) intervalTimer.cancel();
-
+        stopTimersAndReleaseWakelock();
         saveWorkoutSession();
-
         isWorkoutRunning = false;
         isWorkoutPaused = false;
         speak(getString(R.string.tts_workout_complete));
-        sensorManager.unregisterListener(this);
+        if(sensorManager != null) sensorManager.unregisterListener(this);
         if (listener != null) {
             listener.onWorkoutFinished();
         }
-
         stopForeground(true);
         stopSelf();
     }
-
 
     private void startTotalWorkoutTimer(long duration) {
         workoutTimer = new CountDownTimer(duration, 1000) {
@@ -229,7 +218,7 @@ public class WorkoutService extends Service implements SensorEventListener {
             public void onTick(long millisUntilFinished) {
                 workoutTimeRemaining = millisUntilFinished;
                 if (listener != null) listener.onTimerUpdate(workoutTimeRemaining, intervalTimeRemaining);
-                updateNotification(formatTime(workoutTimeRemaining) + " | " + getString(isHighIntensity ? R.string.instruction_go_fast : R.string.instruction_go_slow));
+                // Bildirim saniyede bir güncellenmiyor, pil tasarrufu için.
             }
             @Override
             public void onFinish() {
@@ -254,10 +243,14 @@ public class WorkoutService extends Service implements SensorEventListener {
             listener.onInstructionUpdate(instructionResId, gradientResId);
         }
         speak(getString(instructionResId));
+        updateNotification(getString(instructionResId));
         startIntervalTimer(INTERVAL_TIME_MS);
     }
 
     private void startIntervalTimer(long duration) {
+        if(intervalTimer != null) {
+            intervalTimer.cancel();
+        }
         intervalTimer = new CountDownTimer(duration, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
@@ -271,96 +264,16 @@ public class WorkoutService extends Service implements SensorEventListener {
         }.start();
     }
 
-    // --- SENSOR ---
 
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR && isWorkoutRunning) {
-            sessionStepCount++;
-            if (listener != null) listener.onStepUpdate(sessionStepCount);
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) { }
-
-    // --- HELPERS ---
-
-    private void initializeTextToSpeech() {
-        textToSpeech = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                int result = textToSpeech.setLanguage(new Locale("tr", "TR"));
-                if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
-                    isTtsInitialized = true;
-                }
-            }
-        });
-    }
-
-    private void speak(String text) {
-        if (isTtsInitialized) {
-            textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
-        }
-    }
-
-    private void saveWorkoutSession() {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        String currentDate = sdf.format(new Date());
-        long durationInSeconds = (TOTAL_WORKOUT_TIME_MS - workoutTimeRemaining) / 1000;
-        WorkoutSession session = new WorkoutSession(currentDate, sessionStepCount, durationInSeconds);
-        Executors.newSingleThreadExecutor().execute(() -> {
-            AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
-            db.workoutDao().insertSession(session);
-        });
-    }
-
-    private String formatTime(long millis) {
-        return String.format(Locale.getDefault(), "%02d:%02d",
-                TimeUnit.MILLISECONDS.toMinutes(millis),
-                TimeUnit.MILLISECONDS.toSeconds(millis) - TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(millis))
-        );
-    }
-
-    // --- NOTIFICATION ---
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel serviceChannel = new NotificationChannel(
-                    NOTIFICATION_CHANNEL_ID,
-                    "Workout Service Channel",
-                    NotificationManager.IMPORTANCE_DEFAULT
-            );
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(serviceChannel);
-        }
-    }
-
-    private Notification createNotification(String text) {
-        createNotificationChannel();
-        Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
-
-        return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("Aralıklı Yürüyüş Aktif")
-                .setContentText(text)
-                .setSmallIcon(R.drawable.ic_history) // Kendi ikonunuzu kullanın
-                .setContentIntent(pendingIntent)
-                .build();
-    }
-
-    private void updateNotification(String text) {
-        Notification notification = createNotification(text);
-        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        manager.notify(NOTIFICATION_ID, notification);
-    }
-
-    @Override
-    public void onDestroy() {
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-            textToSpeech.shutdown();
-        }
-        resetWorkout();
-        super.onDestroy();
-    }
+    @Nullable @Override public IBinder onBind(Intent intent) { return binder; }
+    public void setListener(WorkoutListener listener) { this.listener = listener; }
+    @Override public void onSensorChanged(SensorEvent event) { if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR && isWorkoutRunning) { sessionStepCount++; if (listener != null) listener.onStepUpdate(sessionStepCount); } }
+    @Override public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+    private void initializeTextToSpeech() { textToSpeech = new TextToSpeech(this, status -> { if (status == TextToSpeech.SUCCESS) { int result = textToSpeech.setLanguage(new Locale("tr", "TR")); if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) { isTtsInitialized = true; } } }); }
+    private void speak(String text) { if (isTtsInitialized) { textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null); } }
+    private void saveWorkoutSession() { SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()); String currentDate = sdf.format(new Date()); long durationInSeconds = (TOTAL_WORKOUT_TIME_MS - workoutTimeRemaining) / 1000; WorkoutSession session = new WorkoutSession(currentDate, sessionStepCount, durationInSeconds); Executors.newSingleThreadExecutor().execute(() -> { AppDatabase db = AppDatabase.getDatabase(getApplicationContext()); db.workoutDao().insertSession(session); }); }
+    private void createNotificationChannel() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { NotificationChannel serviceChannel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, "Workout Service Channel", NotificationManager.IMPORTANCE_DEFAULT); NotificationManager manager = getSystemService(NotificationManager.class); manager.createNotificationChannel(serviceChannel); } }
+    private Notification createNotification(String text) { createNotificationChannel(); Intent notificationIntent = new Intent(this, MainActivity.class); PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE); return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID).setContentTitle("Aralıklı Yürüyüş Aktif").setContentText(text).setSmallIcon(R.drawable.ic_history).setOnlyAlertOnce(true).setContentIntent(pendingIntent).build(); }
+    private void updateNotification(String text) { Notification notification = createNotification(text); NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE); manager.notify(NOTIFICATION_ID, notification); }
+    @Override public void onDestroy() { stopTimersAndReleaseWakelock(); if (textToSpeech != null) { textToSpeech.stop(); textToSpeech.shutdown(); } if(sensorManager != null) sensorManager.unregisterListener(this); super.onDestroy(); }
 }

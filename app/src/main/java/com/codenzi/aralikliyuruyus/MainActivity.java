@@ -10,9 +10,12 @@ import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.Animation;
@@ -24,6 +27,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
@@ -39,7 +43,7 @@ import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener, WorkoutService.WorkoutListener {
 
-    private static final int PERMISSIONS_REQUEST_CODE = 101; // Tek bir istek kodu kullanacağız
+    private static final int PERMISSIONS_REQUEST_CODE = 101;
     private static final long TOTAL_WORKOUT_TIME_MS = 30 * 60 * 1000;
     private static final long INTERVAL_TIME_MS = 3 * 60 * 1000;
 
@@ -92,7 +96,6 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     @Override
     protected void onStart() {
         super.onStart();
-        // Bind to WorkoutService
         Intent intent = new Intent(this, WorkoutService.class);
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
@@ -101,7 +104,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     protected void onStop() {
         super.onStop();
         if (isBound) {
-            workoutService.setListener(null); // prevent memory leaks
+            workoutService.setListener(null);
             unbindService(connection);
             isBound = false;
         }
@@ -111,17 +114,14 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         if (!isBound) return;
 
         if (workoutService.isWorkoutRunning) {
-            // PAUSE
             Intent intent = new Intent(this, WorkoutService.class);
             intent.setAction(WorkoutService.ACTION_PAUSE_WORKOUT);
             startService(intent);
         } else if (workoutService.isWorkoutPaused) {
-            // RESUME
             Intent intent = new Intent(this, WorkoutService.class);
             intent.setAction(WorkoutService.ACTION_RESUME_WORKOUT);
             startService(intent);
         } else {
-            // START
             checkAndStartWorkout();
         }
     }
@@ -136,28 +136,37 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     }
 
     private void checkAndStartWorkout() {
-        // Gerekli izinlerin listesi oluşturuluyor
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        boolean isIgnoringBatteryOptimizations = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            isIgnoringBatteryOptimizations = pm.isIgnoringBatteryOptimizations(getPackageName());
+        }
+
+        if (!isIgnoringBatteryOptimizations) {
+            promptToIgnoreBatteryOptimizations();
+        } else {
+            checkPermissionsAndStart();
+        }
+    }
+
+    private void checkPermissionsAndStart() {
         ArrayList<String> permissionsToRequest = new ArrayList<>();
 
-        // Android 10 (Q) ve üzeri için ACTIVITY_RECOGNITION izni
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.ACTIVITY_RECOGNITION);
             }
         }
 
-        // Android 13 (TIRAMISU) ve üzeri için POST_NOTIFICATIONS izni
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS);
             }
         }
 
-        // İstenecek izin varsa, kullanıcıdan istenir
         if (!permissionsToRequest.isEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsToRequest.toArray(new String[0]), PERMISSIONS_REQUEST_CODE);
         } else {
-            // Tüm izinler zaten verilmiş, servis başlatılabilir
             startWorkoutService();
         }
     }
@@ -169,6 +178,29 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         ContextCompat.startForegroundService(this, intent);
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
+
+    private void promptToIgnoreBatteryOptimizations() {
+        new AlertDialog.Builder(this)
+                .setTitle("Pil Optimizasyonu Gerekli")
+                .setMessage("Uygulamanın ekran kapalıyken düzgün çalışabilmesi için pil optimizasyonları dışında bırakılması gerekiyor. Lütfen ayarlardan izin verin.")
+                .setPositiveButton("Ayarlara Git", (dialog, which) -> {
+                    Intent intent = new Intent();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                        intent.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    }
+                    dialog.dismiss();
+                    Toast.makeText(this, "Lütfen 'Aralıklı Yürüyüş' uygulamasını bulup 'Optimize Etme' seçeneğini işaretleyin.", Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("İptal", (dialog, which) -> {
+                    Toast.makeText(this, "Bu izin olmadan uygulama arka planda durabilir.", Toast.LENGTH_LONG).show();
+                    dialog.dismiss();
+                })
+                .create()
+                .show();
+    }
+
 
     private void initViews() {
         tvInstruction = findViewById(R.id.tvInstruction);
@@ -261,7 +293,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSIONS_REQUEST_CODE) {
             boolean allGranted = true;
-            if (grantResults.length == 0) { // Kullanıcı hiçbir şey seçmeden dialog'u kapatırsa
+            if (grantResults.length == 0) {
                 allGranted = false;
             } else {
                 for (int grantResult : grantResults) {
@@ -273,17 +305,12 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             }
 
             if (allGranted) {
-                // Tüm izinler verildi, servisi başlat
                 startWorkoutService();
             } else {
-                // En az bir izin reddedildi
                 Toast.makeText(this, "Antrenmanı başlatmak için gerekli izinler verilmedi.", Toast.LENGTH_LONG).show();
             }
         }
     }
-
-
-    // --- Service Listener Callbacks ---
 
     @Override
     public void onTimerUpdate(long totalMillis, long intervalMillis) {
@@ -343,8 +370,6 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             animateBackground(R.drawable.gradient_idle);
         });
     }
-
-    // --- Navigation ---
 
     @Override
     public void onBackPressed() {

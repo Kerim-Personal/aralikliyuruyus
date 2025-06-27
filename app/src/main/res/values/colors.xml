@@ -25,7 +25,9 @@
     <color name="idle_gradient_end">#FAFAFA</color>
 
     <color name="slow_gradient_start">#FFFFFF</color>
-    <color name="slow_gradient_end">#F3E5F5</color> <color name="fast_gradient_start">#FFFFFF</color>
-    <color name="fast_gradient_end">#FFEBEE</color> <color name="paused_gradient_start">#F5F5F5</color>
+    <color name="slow_gradient_end">#FCE4EC</color>
+    <color name="fast_gradient_start">#FFFFFF</color>
+    <color name="fast_gradient_end">#F8BBD0</color>
+    <color name="paused_gradient_start">#F5F5F5</color>
     <color name="paused_gradient_end">#EEEEEE</color>
 </resources>
